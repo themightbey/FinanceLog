@@ -1,7 +1,10 @@
 // FinanceLog API client.
 //
-// Points at the Cloudflare Worker. Override via VITE_FINANCE_API env or
-// at runtime by setting localStorage.FINANCE_API_URL.
+// In production the Cloudflare Worker serves both the SPA and the API,
+// so requests are same-origin and the browser's Basic Auth credentials
+// are sent automatically. For `vite dev`, vite.config.mjs proxies /api
+// to a local wrangler instance. You can still override the base URL at
+// runtime via localStorage.FINANCE_API_URL.
 
 const RUNTIME_OVERRIDE_KEY = 'FINANCE_API_URL';
 const RUNTIME_TOKEN_KEY = 'FINANCE_API_TOKEN';
@@ -13,7 +16,8 @@ function baseUrl() {
   }
   const envBase = import.meta.env.VITE_FINANCE_API;
   if (envBase) return envBase.replace(/\/$/, '');
-  return 'http://localhost:8787';
+  // Same origin — Worker serves both SPA and API.
+  return '';
 }
 
 function authHeader() {

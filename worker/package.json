@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "build:frontend": "cd ../vite && (yarn install --immutable || npm install) && (yarn build || npm run build)",
+    "deploy": "npm run build:frontend && wrangler deploy",
     "db:init": "wrangler d1 execute financelog --file=./schema.sql",
     "db:init:remote": "wrangler d1 execute financelog --remote --file=./schema.sql",
     "db:reset": "wrangler d1 execute financelog --command=\"DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS statements; DROP TABLE IF EXISTS accounts;\" && npm run db:init"
