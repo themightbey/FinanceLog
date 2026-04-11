@@ -11,19 +11,16 @@ import financeApi from 'api/finance';
 
 export default function FinanceSettings() {
   const [url, setUrl] = useState('');
-  const [token, setToken] = useState('');
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setUrl(financeApi.baseUrl());
-    setToken(financeApi.getToken());
   }, []);
 
   const save = () => {
     financeApi.setBaseUrl(url.trim());
-    financeApi.setToken(token.trim());
-    setStatus({ severity: 'success', msg: 'Saved.' });
+    setStatus({ severity: 'success', msg: 'Saved. Reload the page for the change to take effect.' });
   };
 
   const testConnection = async () => {
@@ -39,28 +36,42 @@ export default function FinanceSettings() {
     }
   };
 
+  const logout = () => {
+    // The cleanest way to clear Basic Auth creds is to hit a 401 with a
+    // bogus Authorization header — the browser then forgets the cached
+    // credentials for this origin.
+    fetch('/api/summary', { headers: { Authorization: 'Basic ' + btoa('logout:logout') }, cache: 'no-store' })
+      .catch(() => {})
+      .finally(() => window.location.reload());
+  };
+
   return (
     <Stack spacing={3}>
       <MainCard title="FinanceLog settings">
         <Stack spacing={2}>
           <Typography variant="body2" color="text.secondary">
-            The frontend talks to a Cloudflare Worker. Point it at your deployed URL (or <code>http://localhost:8787</code> while running{' '}
-            <code>wrangler dev</code>). Credentials are stored in your browser&apos;s local storage — nothing is sent anywhere else.
+            The site is hosted end-to-end by a single Cloudflare Worker, so the SPA and the API are on the same origin. The Worker gates
+            every request behind HTTP Basic Auth — that&apos;s the password prompt you got when you first loaded the page.
+          </Typography>
+
+          <Button variant="outlined" color="warning" onClick={logout} sx={{ alignSelf: 'flex-start' }}>
+            Sign out (clear browser credentials)
+          </Button>
+        </Stack>
+      </MainCard>
+
+      <MainCard title="Advanced — custom API host">
+        <Stack spacing={2}>
+          <Typography variant="body2" color="text.secondary">
+            Only touch this if you&apos;re running the SPA against a different worker (e.g. local dev without the vite proxy). Leave blank
+            to use the current origin.
           </Typography>
           <TextField
-            label="API URL"
+            label="API URL override"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://financelog-api.<you>.workers.dev"
+            placeholder="leave blank for same-origin"
             fullWidth
-          />
-          <TextField
-            label="API token (optional)"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="bearer token if you set API_TOKEN on the worker"
-            fullWidth
-            type="password"
           />
           <Stack direction="row" spacing={2}>
             <Button variant="contained" onClick={save}>

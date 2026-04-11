@@ -1,5 +1,7 @@
-// FinanceLog Cloudflare Worker API
-// Stack: D1 (SQL), R2 (PDF storage), Mistral (OCR + structured extraction)
+// FinanceLog Cloudflare Worker
+// Stack: D1 (SQL) + R2 (PDF storage) + Mistral (OCR + structured extraction)
+// Also serves the built React SPA from env.ASSETS and gates the whole
+// site behind HTTP Basic Auth using the SITE_PASSWORD secret.
 
 import { extractFromPdf } from './mistral.js';
 
@@ -10,46 +12,108 @@ import { extractFromPdf } from './mistral.js';
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const p = url.pathname;
+    const m = request.method;
 
-    // CORS preflight
-    if (request.method === 'OPTIONS') return cors(new Response(null, { status: 204 }));
+    // Let /api/health through unauthenticated so you can quickly verify
+    // the worker is alive without poking at credentials.
+    const isHealth = p === '/api/health';
 
-    try {
-      // Optional shared-secret auth. If API_TOKEN is set as a secret, require it.
-      if (env.API_TOKEN && !url.pathname.startsWith('/api/health')) {
-        const auth = request.headers.get('authorization') || '';
-        const token = auth.replace(/^Bearer\s+/i, '');
-        if (token !== env.API_TOKEN) return cors(json({ error: 'unauthorized' }, 401));
-      }
-
-      const p = url.pathname;
-      const m = request.method;
-
-      if (p === '/api/health' && m === 'GET') return cors(json({ ok: true }));
-
-      if (p === '/api/summary' && m === 'GET') return cors(await getSummary(env));
-
-      if (p === '/api/statements' && m === 'GET') return cors(await listStatements(env, url));
-      if (p === '/api/statements/upload' && m === 'POST') return cors(await uploadStatement(request, env, ctx));
-
-      const stmMatch = p.match(/^\/api\/statements\/(\d+)$/);
-      if (stmMatch && m === 'GET') return cors(await getStatement(env, Number(stmMatch[1])));
-      if (stmMatch && m === 'DELETE') return cors(await deleteStatement(env, Number(stmMatch[1])));
-
-      const pdfMatch = p.match(/^\/api\/statements\/(\d+)\/pdf$/);
-      if (pdfMatch && m === 'GET') return cors(await getStatementPdf(env, Number(pdfMatch[1])));
-
-      if (p === '/api/transactions' && m === 'GET') return cors(await listTransactions(env, url));
-      if (p === '/api/accounts' && m === 'GET') return cors(await listAccounts(env));
-      if (p === '/api/categories' && m === 'GET') return cors(await listCategories(env));
-
-      return cors(json({ error: 'not found', path: p }, 404));
-    } catch (err) {
-      console.error('Worker error', err);
-      return cors(json({ error: err.message || String(err) }, 500));
+    // Gate everything behind Basic Auth. The browser caches the creds
+    // on the origin, so after the initial prompt subsequent API calls
+    // from the SPA are authorised automatically.
+    if (!isHealth && !checkSiteAuth(request, env)) {
+      return authChallenge();
     }
+
+    // CORS preflight (same-origin in production, but still handy for dev).
+    if (m === 'OPTIONS') return cors(new Response(null, { status: 204 }));
+
+    // API routes --------------------------------------------------------
+    if (p.startsWith('/api/')) {
+      try {
+        if (p === '/api/health' && m === 'GET') return cors(json({ ok: true }));
+        if (p === '/api/summary' && m === 'GET') return cors(await getSummary(env));
+
+        if (p === '/api/statements' && m === 'GET') return cors(await listStatements(env, url));
+        if (p === '/api/statements/upload' && m === 'POST') return cors(await uploadStatement(request, env, ctx));
+
+        const stmMatch = p.match(/^\/api\/statements\/(\d+)$/);
+        if (stmMatch && m === 'GET') return cors(await getStatement(env, Number(stmMatch[1])));
+        if (stmMatch && m === 'DELETE') return cors(await deleteStatement(env, Number(stmMatch[1])));
+
+        const pdfMatch = p.match(/^\/api\/statements\/(\d+)\/pdf$/);
+        if (pdfMatch && m === 'GET') return cors(await getStatementPdf(env, Number(pdfMatch[1])));
+
+        if (p === '/api/transactions' && m === 'GET') return cors(await listTransactions(env, url));
+        if (p === '/api/accounts' && m === 'GET') return cors(await listAccounts(env));
+        if (p === '/api/categories' && m === 'GET') return cors(await listCategories(env));
+
+        return cors(json({ error: 'not found', path: p }, 404));
+      } catch (err) {
+        console.error('Worker error', err);
+        return cors(json({ error: err.message || String(err) }, 500));
+      }
+    }
+
+    // Otherwise serve the SPA from the [assets] binding. Wrangler's
+    // single-page-application not_found_handling falls back to
+    // index.html for client-side routes.
+    if (env.ASSETS) {
+      return env.ASSETS.fetch(request);
+    }
+    return new Response('Assets not configured', { status: 500 });
   }
 };
+
+// -----------------------------------------------------------------------
+// Auth
+// -----------------------------------------------------------------------
+
+function checkSiteAuth(request, env) {
+  // If no password is configured (e.g. local dev without .dev.vars),
+  // allow through. Set SITE_PASSWORD to enable the gate.
+  if (!env.SITE_PASSWORD) return true;
+
+  const header = request.headers.get('authorization') || '';
+  if (header.startsWith('Basic ')) {
+    try {
+      const decoded = atob(header.slice(6));
+      const idx = decoded.indexOf(':');
+      const password = idx >= 0 ? decoded.slice(idx + 1) : '';
+      if (timingSafeEqual(password, env.SITE_PASSWORD)) return true;
+    } catch (_) {
+      /* fall through */
+    }
+  }
+
+  // Also accept a plain Bearer token for programmatic / curl access.
+  if (header.startsWith('Bearer ')) {
+    const token = header.slice(7);
+    if (timingSafeEqual(token, env.SITE_PASSWORD)) return true;
+  }
+
+  return false;
+}
+
+function authChallenge() {
+  return new Response('Authentication required', {
+    status: 401,
+    headers: {
+      'WWW-Authenticate': 'Basic realm="FinanceLog", charset="UTF-8"',
+      'content-type': 'text/plain;charset=utf-8',
+      'cache-control': 'no-store'
+    }
+  });
+}
+
+function timingSafeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
 
 // -----------------------------------------------------------------------
 // Handlers
