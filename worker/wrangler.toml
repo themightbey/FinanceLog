@@ -16,7 +16,7 @@ not_found_handling = "single-page-application"
 [[d1_databases]]
 binding = "DB"
 database_name = "financelog"
-database_id = "REPLACE_WITH_YOUR_D1_ID"
+database_id = "3986dd93-fa51-4005-aa80-be78f34b6a1a"
 
 # R2 bucket for raw PDFs
 # Create with: wrangler r2 bucket create financelog-statements
