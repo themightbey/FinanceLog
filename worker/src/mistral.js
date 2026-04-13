@@ -51,7 +51,7 @@ const STATEMENT_JSON_SCHEMA = {
     total_interest: { type: ['number', 'null'] },
     total_payments: { type: ['number', 'null'] },
     total_purchases: { type: ['number', 'null'] },
-    currency: { type: ['string', 'null'], description: 'ISO 4217 code, default USD' },
+    currency: { type: ['string', 'null'], description: 'ISO 4217 code, default GBP' },
     transactions: {
       type: 'array',
       items: {
@@ -198,7 +198,7 @@ function normalizeExtraction(obj) {
   if (!obj || typeof obj !== 'object') return { transactions: [] };
 
   const out = { ...obj };
-  out.currency = out.currency || 'USD';
+  out.currency = out.currency || 'GBP';
   out.transactions = Array.isArray(out.transactions) ? out.transactions : [];
 
   out.transactions = out.transactions.map((t) => {

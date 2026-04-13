@@ -410,7 +410,7 @@ async function uploadStatement(request, env, ctx) {
       num(extraction.total_interest),
       num(extraction.total_payments),
       num(extraction.total_purchases),
-      extraction.currency || 'USD',
+      extraction.currency || 'GBP',
       hash,
       r2Key,
       filename,
@@ -441,7 +441,7 @@ async function uploadStatement(request, env, ctx) {
           t.category || null,
           num(t.amount),
           t.direction || null,
-          extraction.currency || 'USD'
+          extraction.currency || 'GBP'
         )
       )
     );
@@ -483,7 +483,7 @@ async function upsertAccount(env, extraction) {
   const res = await env.DB.prepare(
     `INSERT INTO accounts (name, issuer, account_type, last_four, currency) VALUES (?,?,?,?,?)`
   )
-    .bind(name, issuer, type, lastFour, extraction.currency || 'USD')
+    .bind(name, issuer, type, lastFour, extraction.currency || 'GBP')
     .run();
   return res.meta.last_row_id;
 }

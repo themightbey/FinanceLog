@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   issuer TEXT,
   account_type TEXT,              -- credit_card, checking, savings, loan
   last_four TEXT,
-  currency TEXT DEFAULT 'USD',
+  currency TEXT DEFAULT 'GBP',
   created_at TEXT DEFAULT (datetime('now')),
   UNIQUE (issuer, last_four, account_type)
 );
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS statements (
   total_interest REAL,
   total_payments REAL,
   total_purchases REAL,
-  currency TEXT DEFAULT 'USD',
+  currency TEXT DEFAULT 'GBP',
   pdf_hash TEXT UNIQUE NOT NULL,  -- SHA-256 of uploaded PDF
   pdf_r2_key TEXT NOT NULL,
   pdf_filename TEXT,
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   category TEXT,
   amount REAL,                    -- positive = money out (expense), negative = money in (income/refund)
   direction TEXT,                 -- 'debit' | 'credit'
-  currency TEXT DEFAULT 'USD',
+  currency TEXT DEFAULT 'GBP',
   created_at TEXT DEFAULT (datetime('now'))
 );
 

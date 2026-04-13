@@ -1,15 +1,15 @@
 // Shared formatting helpers for finance views.
 
-export function formatMoney(value, currency = 'USD') {
+export function formatMoney(value, currency = 'GBP') {
   if (value == null || value === '' || Number.isNaN(Number(value))) return '—';
   try {
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat('en-GB', {
       style: 'currency',
-      currency: currency || 'USD',
+      currency: currency || 'GBP',
       maximumFractionDigits: 2
     }).format(Number(value));
   } catch {
-    return `$${Number(value).toFixed(2)}`;
+    return `£${Number(value).toFixed(2)}`;
   }
 }
 
