@@ -20,25 +20,54 @@ import { gridSpacing } from 'store/constant';
 import financeApi from 'api/finance';
 import { formatMoney, formatDate, formatMonth, percent, CATEGORY_COLORS } from 'utils/finance-format';
 
+const STAT_GRADIENTS = {
+  error: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+  success: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+  warning: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+  primary: 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)'
+};
+
 function StatCard({ label, value, sub, color = 'primary' }) {
-  const theme = useTheme();
   return (
     <MainCard
       sx={{
-        bgcolor: `${color}.light`,
-        color: `${color}.dark`,
-        borderLeft: `4px solid ${theme.vars?.palette?.[color]?.main || theme.palette[color].main}`
+        background: STAT_GRADIENTS[color] || STAT_GRADIENTS.primary,
+        color: '#fff',
+        border: 'none',
+        borderRadius: 3,
+        position: 'relative',
+        overflow: 'hidden',
+        '&::after': {
+          content: '""',
+          position: 'absolute',
+          width: 160,
+          height: 160,
+          background: 'rgba(255,255,255,0.08)',
+          borderRadius: '50%',
+          top: -60,
+          right: -40
+        },
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          width: 100,
+          height: 100,
+          background: 'rgba(255,255,255,0.05)',
+          borderRadius: '50%',
+          bottom: -30,
+          left: -20
+        }
       }}
     >
-      <Stack spacing={0.5}>
-        <Typography variant="subtitle2" sx={{ color: `${color}.dark`, opacity: 0.9 }}>
+      <Stack spacing={0.5} sx={{ position: 'relative', zIndex: 1 }}>
+        <Typography variant="subtitle2" sx={{ color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>
           {label}
         </Typography>
-        <Typography variant="h3" sx={{ fontWeight: 600 }}>
+        <Typography variant="h3" sx={{ fontWeight: 700, color: '#fff' }}>
           {value}
         </Typography>
         {sub && (
-          <Typography variant="caption" sx={{ opacity: 0.85 }}>
+          <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
             {sub}
           </Typography>
         )}
