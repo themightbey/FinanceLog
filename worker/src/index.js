@@ -469,17 +469,63 @@ async function upsertAccount(env, extraction) {
   const type = extraction.account_type || null;
   const name = extraction.account_name || [issuer, lastFour && `•${lastFour}`].filter(Boolean).join(' ') || 'Unknown account';
 
+  // 1. Exact match on issuer + last_four + account_type (same card).
   if (issuer || lastFour) {
-    const existing = await env.DB.prepare(
+    const exact = await env.DB.prepare(
       `SELECT id FROM accounts WHERE COALESCE(issuer,'') = COALESCE(?, '')
           AND COALESCE(last_four,'') = COALESCE(?, '')
           AND COALESCE(account_type,'') = COALESCE(?, '')`
     )
       .bind(issuer, lastFour, type)
       .first();
-    if (existing) return existing.id;
+    if (exact) return exact.id;
   }
 
+  // 2. Fuzzy match — same issuer + account_type but different card number.
+  //    Catches replacement cards (e.g. Nationwide •5939 → •9491).
+  //    We match on (issuer, account_type) plus either the same holder name
+  //    or the same credit limit, which is a strong signal it's the same
+  //    underlying account.
+  if (issuer && type) {
+    const creditLimit = num(extraction.credit_limit);
+    const fuzzy = await env.DB.prepare(
+      `SELECT a.id, a.last_four AS old_last_four
+       FROM accounts a
+       WHERE COALESCE(a.issuer,'') = COALESCE(?, '')
+         AND COALESCE(a.account_type,'') = COALESCE(?, '')
+         AND a.last_four != COALESCE(?, '')
+       ORDER BY a.id DESC
+       LIMIT 5`
+    )
+      .bind(issuer, type, lastFour || '')
+      .all();
+
+    for (const candidate of fuzzy.results || []) {
+      // Check if the latest statement for this account has the same
+      // credit limit or if the account name matches — either is enough
+      // to confirm it's the same underlying account.
+      const latest = await env.DB.prepare(
+        `SELECT account_name, credit_limit FROM statements
+         WHERE account_id = ? ORDER BY statement_date DESC LIMIT 1`
+      )
+        .bind(candidate.id)
+        .first();
+
+      const nameMatch = latest?.account_name && name && latest.account_name.toLowerCase() === name.toLowerCase();
+      const limitMatch = creditLimit != null && latest?.credit_limit != null && creditLimit === latest.credit_limit;
+
+      if (nameMatch || limitMatch) {
+        // Same account, new card number — update the account record.
+        console.log(
+          `Account merge: ${issuer} •${candidate.old_last_four} → •${lastFour} (matched by ${nameMatch ? 'name' : 'credit_limit'})`
+        );
+        await env.DB.prepare(`UPDATE accounts SET last_four = ?, name = ? WHERE id = ?`).bind(lastFour, name, candidate.id).run();
+        return candidate.id;
+      }
+    }
+  }
+
+  // 3. No match — create a new account.
   const res = await env.DB.prepare(
     `INSERT INTO accounts (name, issuer, account_type, last_four, currency) VALUES (?,?,?,?,?)`
   )
