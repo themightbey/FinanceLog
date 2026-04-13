@@ -48,6 +48,7 @@ export default {
         if (p === '/api/transactions' && m === 'GET') return cors(await listTransactions(env, url));
         if (p === '/api/accounts' && m === 'GET') return cors(await listAccounts(env));
         if (p === '/api/categories' && m === 'GET') return cors(await listCategories(env));
+        if (p === '/api/debt-summary' && m === 'GET') return cors(await getDebtSummary(env));
 
         return cors(json({ error: 'not found', path: p }, 404));
       } catch (err) {
@@ -315,6 +316,165 @@ async function listCategories(env) {
   return json({ categories: results || [] });
 }
 
+async function getDebtSummary(env) {
+  const db = env.DB;
+
+  // For each account, get the latest statement and its balance segments.
+  // An account carries "debt" if it's a credit card or loan with a positive closing balance.
+  const { results: latestStatements } = await db
+    .prepare(
+      `SELECT s.*
+       FROM statements s
+       JOIN (
+         SELECT account_id, MAX(statement_date) AS md
+         FROM statements
+         WHERE closing_balance > 0
+         GROUP BY account_id
+       ) latest ON s.account_id = latest.account_id AND s.statement_date = latest.md
+       ORDER BY s.closing_balance DESC`
+    )
+    .all();
+
+  const accounts = [];
+  let totalDebt = 0;
+  let totalPromoDebt = 0;
+  let totalStandardDebt = 0;
+  let estimatedMonthlyInterest = 0;
+  const allSegments = [];
+  const expiringPromos = [];
+
+  for (const stmt of latestStatements || []) {
+    const { results: segments } = await db
+      .prepare(`SELECT * FROM balance_segments WHERE statement_id = ? ORDER BY interest_rate DESC`)
+      .bind(stmt.id)
+      .all();
+
+    const balance = Number(stmt.closing_balance || 0);
+    totalDebt += balance;
+
+    let accountPromo = 0;
+    let accountStandard = 0;
+    let accountMonthlyInterest = 0;
+
+    for (const seg of segments || []) {
+      const segBalance = Number(seg.outstanding_balance || 0);
+      const rate = Number(seg.interest_rate || 0);
+      const monthlyRate = rate / 100 / 12;
+      const monthlyInterest = segBalance * monthlyRate;
+      accountMonthlyInterest += monthlyInterest;
+
+      if (seg.is_promotional) {
+        accountPromo += segBalance;
+        if (seg.promo_expiry_date) {
+          expiringPromos.push({
+            account_name: stmt.account_name,
+            issuer: stmt.issuer,
+            last_four: stmt.last_four,
+            description: seg.description,
+            outstanding_balance: segBalance,
+            interest_rate: rate,
+            promo_expiry_date: seg.promo_expiry_date,
+            reverts_to_rate: stmt.interest_rate_purchase,
+            monthly_interest_after: segBalance * ((stmt.interest_rate_purchase || 0) / 100 / 12)
+          });
+        }
+      } else {
+        accountStandard += segBalance;
+      }
+
+      allSegments.push({
+        ...seg,
+        account_name: stmt.account_name,
+        issuer: stmt.issuer,
+        last_four: stmt.last_four,
+        monthly_interest: monthlyInterest
+      });
+    }
+
+    totalPromoDebt += accountPromo;
+    totalStandardDebt += accountStandard;
+    estimatedMonthlyInterest += accountMonthlyInterest;
+
+    // If no segments, estimate from the statement-level rate.
+    if (!segments?.length && balance > 0 && stmt.interest_rate_purchase) {
+      const rate = Number(stmt.interest_rate_purchase);
+      const monthly = balance * (rate / 100 / 12);
+      estimatedMonthlyInterest += monthly;
+      totalStandardDebt += balance;
+    }
+
+    accounts.push({
+      account_id: stmt.account_id,
+      account_name: stmt.account_name,
+      issuer: stmt.issuer,
+      last_four: stmt.last_four,
+      account_type: stmt.account_type,
+      statement_date: stmt.statement_date,
+      closing_balance: balance,
+      minimum_payment: stmt.minimum_payment,
+      payment_due_date: stmt.payment_due_date,
+      interest_rate_purchase: stmt.interest_rate_purchase,
+      credit_limit: stmt.credit_limit,
+      available_credit: stmt.available_credit,
+      currency: stmt.currency,
+      segments: segments || [],
+      monthly_interest: accountMonthlyInterest,
+      promo_balance: accountPromo,
+      standard_balance: accountStandard
+    });
+  }
+
+  // Sort expiring promos by date (soonest first).
+  expiringPromos.sort((a, b) => (a.promo_expiry_date || '').localeCompare(b.promo_expiry_date || ''));
+
+  // Build a priority payoff list: pay off highest-cost segments first.
+  // Priority: 1) promos expiring soonest (they'll become expensive), 2) highest APR segments.
+  const priorityList = allSegments
+    .filter((s) => Number(s.outstanding_balance || 0) > 0)
+    .map((s) => {
+      const bal = Number(s.outstanding_balance || 0);
+      const rate = Number(s.interest_rate || 0);
+      const isPromo = !!s.is_promotional;
+      const expiry = s.promo_expiry_date;
+      // Urgency score: promos about to expire get highest priority,
+      // then highest APR. The formula: if promo expiring within 90 days,
+      // score = 10000 - days_until_expiry. Otherwise score = APR.
+      let urgency = rate;
+      if (isPromo && expiry) {
+        const daysUntil = (new Date(expiry) - new Date()) / 86400000;
+        if (daysUntil <= 90 && daysUntil > 0) {
+          urgency = 10000 - daysUntil;
+        } else if (daysUntil <= 0) {
+          urgency = 20000; // already expired promo — pay ASAP
+        }
+      }
+      return {
+        account_name: s.account_name,
+        issuer: s.issuer,
+        last_four: s.last_four,
+        description: s.description,
+        outstanding_balance: bal,
+        interest_rate: rate,
+        is_promotional: isPromo,
+        promo_expiry_date: expiry || null,
+        monthly_interest: Number(s.monthly_interest || 0),
+        urgency
+      };
+    })
+    .sort((a, b) => b.urgency - a.urgency);
+
+  return json({
+    total_debt: totalDebt,
+    total_promo_debt: totalPromoDebt,
+    total_standard_debt: totalStandardDebt,
+    estimated_monthly_interest: estimatedMonthlyInterest,
+    estimated_annual_interest: estimatedMonthlyInterest * 12,
+    accounts,
+    expiring_promos: expiringPromos,
+    priority_payoff: priorityList
+  });
+}
+
 // -----------------------------------------------------------------------
 // Upload pipeline: hash → dedupe → R2 → Mistral → D1
 // -----------------------------------------------------------------------
@@ -447,10 +607,36 @@ async function uploadStatement(request, env, ctx) {
     );
   }
 
+  // Insert balance segments (interest rate tiers) in a batch.
+  const segs = Array.isArray(extraction.balance_segments) ? extraction.balance_segments : [];
+  if (segs.length) {
+    const insertSeg = env.DB.prepare(
+      `INSERT INTO balance_segments (
+         statement_id, account_id, description, interest_rate,
+         interest_amount, outstanding_balance, is_promotional, promo_expiry_date
+       ) VALUES (?,?,?,?,?,?,?,?)`
+    );
+    await env.DB.batch(
+      segs.map((s) =>
+        insertSeg.bind(
+          statementId,
+          accountId,
+          s.description || null,
+          num(s.interest_rate),
+          num(s.interest_amount),
+          num(s.outstanding_balance),
+          s.is_promotional ? 1 : 0,
+          s.promo_expiry_date || null
+        )
+      )
+    );
+  }
+
   return json({
     ok: true,
     statement_id: statementId,
     transactions_imported: txs.length,
+    segments_imported: segs.length,
     account_id: accountId,
     extraction: {
       account_name: extraction.account_name,

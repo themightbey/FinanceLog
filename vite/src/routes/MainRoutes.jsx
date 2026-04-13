@@ -9,6 +9,7 @@ import Loadable from 'ui-component/Loadable';
 const FinanceOverview = Loadable(lazy(() => import('views/finance/Overview')));
 const FinanceUpload = Loadable(lazy(() => import('views/finance/Upload')));
 const FinanceTransactions = Loadable(lazy(() => import('views/finance/Transactions')));
+const FinanceDebt = Loadable(lazy(() => import('views/finance/Debt')));
 const FinanceStatements = Loadable(lazy(() => import('views/finance/Statements')));
 const FinanceSettings = Loadable(lazy(() => import('views/finance/Settings')));
 
@@ -27,6 +28,7 @@ const MainRoutes = {
         { path: 'overview', element: <FinanceOverview /> },
         { path: 'upload', element: <FinanceUpload /> },
         { path: 'transactions', element: <FinanceTransactions /> },
+        { path: 'debt', element: <FinanceDebt /> },
         { path: 'statements', element: <FinanceStatements /> },
         { path: 'settings', element: <FinanceSettings /> }
       ]

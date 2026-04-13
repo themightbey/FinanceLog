@@ -52,6 +52,22 @@ const STATEMENT_JSON_SCHEMA = {
     total_payments: { type: ['number', 'null'] },
     total_purchases: { type: ['number', 'null'] },
     currency: { type: ['string', 'null'], description: 'ISO 4217 code, default GBP' },
+    balance_segments: {
+      type: 'array',
+      description: 'Interest rate tiers / balance segments from the statement interest summary. Each row represents a balance at a specific rate.',
+      items: {
+        type: 'object',
+        properties: {
+          description: { type: ['string', 'null'], description: 'e.g. "Purchases", "Balance Transfer", "Promotional BT", "24 Month Balance Transfer", "Cash Advance"' },
+          interest_rate: { type: ['number', 'null'], description: 'APR percent for this segment, e.g. 24.9 or 0.0' },
+          interest_amount: { type: ['number', 'null'], description: 'Interest charged this period on this segment' },
+          outstanding_balance: { type: ['number', 'null'], description: 'Current balance at this rate' },
+          is_promotional: { type: ['boolean', 'null'], description: 'true if this is a promotional/introductory rate (0% BT, low rate offers, etc)' },
+          promo_expiry_date: { type: ['string', 'null'], description: 'ISO date YYYY-MM-DD when the promotional rate ends. null if not promotional or no expiry shown.' }
+        },
+        required: ['description']
+      }
+    },
     transactions: {
       type: 'array',
       items: {

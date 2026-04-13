@@ -113,6 +113,11 @@ export const financeApi = {
     return handle(res);
   },
 
+  async debtSummary() {
+    const res = await fetch(`${baseUrl()}/api/debt-summary`, { headers: authHeader() });
+    return handle(res);
+  },
+
   async uploadStatement(file) {
     const fd = new FormData();
     fd.append('file', file);

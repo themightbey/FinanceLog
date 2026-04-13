@@ -1,6 +1,6 @@
-import { IconLayoutDashboard, IconCloudUpload, IconListDetails, IconFileInvoice, IconSettings } from '@tabler/icons-react';
+import { IconLayoutDashboard, IconCloudUpload, IconListDetails, IconFileInvoice, IconSettings, IconScale } from '@tabler/icons-react';
 
-const icons = { IconLayoutDashboard, IconCloudUpload, IconListDetails, IconFileInvoice, IconSettings };
+const icons = { IconLayoutDashboard, IconCloudUpload, IconListDetails, IconFileInvoice, IconSettings, IconScale };
 
 const finance = {
   id: 'finance',
@@ -29,6 +29,14 @@ const finance = {
       type: 'item',
       url: '/finance/transactions',
       icon: icons.IconListDetails,
+      breadcrumbs: false
+    },
+    {
+      id: 'finance-debt',
+      title: 'Debt',
+      type: 'item',
+      url: '/finance/debt',
+      icon: icons.IconScale,
       breadcrumbs: false
     },
     {

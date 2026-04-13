@@ -60,6 +60,22 @@ CREATE TABLE IF NOT EXISTS transactions (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS balance_segments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  statement_id INTEGER REFERENCES statements(id) ON DELETE CASCADE,
+  account_id INTEGER REFERENCES accounts(id),
+  description TEXT,               -- "Purchases", "Promotional BT", "24 Month Balance Transfer", etc.
+  interest_rate REAL,             -- APR % for this segment
+  interest_amount REAL,           -- interest charged this period
+  outstanding_balance REAL,       -- current balance at this rate
+  is_promotional INTEGER DEFAULT 0,
+  promo_expiry_date TEXT,         -- ISO date when promo rate ends
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_balance_segments_statement ON balance_segments(statement_id);
+CREATE INDEX IF NOT EXISTS idx_balance_segments_account ON balance_segments(account_id);
+
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(tx_date);
 CREATE INDEX IF NOT EXISTS idx_transactions_statement ON transactions(statement_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(account_id);
