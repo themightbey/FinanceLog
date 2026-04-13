@@ -1,25 +1,22 @@
 name = "financelog-app"
-main = "src/index.js"
+main = "worker/src/index.js"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Serve the built SPA from the same worker. The worker runs first on
-# every request so the Basic Auth gate covers both the HTML and the API.
+# Serve the built SPA from the same worker.
 [assets]
-directory = "../vite/dist"
+directory = "vite/dist"
 binding = "ASSETS"
 run_worker_first = true
 not_found_handling = "single-page-application"
 
 # D1 database binding
-# Create with: wrangler d1 create financelog
 [[d1_databases]]
 binding = "DB"
 database_name = "financelog"
 database_id = "3986dd93-fa51-4005-aa80-be78f34b6a1a"
 
 # R2 bucket for raw PDFs
-# Create with: wrangler r2 bucket create financelog-statements
 [[r2_buckets]]
 binding = "PDFS"
 bucket_name = "financelog-statements"
@@ -29,8 +26,8 @@ MISTRAL_MODEL = "mistral-large-latest"
 MISTRAL_OCR_MODEL = "mistral-ocr-latest"
 
 # Secrets (set via `wrangler secret put <NAME>`):
-#   SITE_PASSWORD   - Basic Auth password for the whole site (required)
-#   MISTRAL_API_KEY - Mistral API key (required)
+#   SITE_PASSWORD   - Basic Auth password for the whole site
+#   MISTRAL_API_KEY - Mistral API key
 
 [observability]
 enabled = true
