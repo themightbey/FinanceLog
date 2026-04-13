@@ -118,6 +118,21 @@ export const financeApi = {
     return handle(res);
   },
 
+  async updateTransaction(id, updates) {
+    const res = await fetch(`${baseUrl()}/api/transactions/${id}`, {
+      method: 'PATCH',
+      headers: { ...authHeader(), 'content-type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    return handle(res);
+  },
+
+  exportTransactionsUrl(params = {}) {
+    const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+    const q = new URLSearchParams(clean);
+    return `${baseUrl()}/api/transactions/export?${q}`;
+  },
+
   async uploadStatement(file) {
     const fd = new FormData();
     fd.append('file', file);

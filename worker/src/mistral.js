@@ -23,7 +23,22 @@ Rules:
 - "direction" is "debit" when amount > 0, "credit" when amount < 0.
 - Interest rates are annual percent rates as numbers (e.g. 19.99 for 19.99% APR). Null if not present.
 - Never invent data. If a field is not visible, use null.
-- Capture ALL transactions, even if there are dozens. Do not summarize or truncate.`;
+- Capture ALL transactions, even if there are dozens. Do not summarize or truncate.
+- ALWAYS assign a category to every transaction. Use your best judgement based on the merchant name and description:
+  - "groceries": supermarkets, food shops (Tesco, Sainsbury's, Asda, Aldi, Lidl, M&S Food, Waitrose, Co-op)
+  - "dining": restaurants, cafes, takeaways, pubs, fast food (McDonald's, Nando's, Costa, Starbucks)
+  - "travel": fuel, transport, flights, hotels, car hire, parking (Shell, BP, Uber, Trainline, National Rail)
+  - "utilities": gas, electric, water, broadband, mobile, council tax (BT, Sky, EE, British Gas, Thames Water)
+  - "shopping": retail, clothing, Amazon, eBay, online stores, general merchandise
+  - "entertainment": streaming, cinema, gym, sports, subscriptions (Netflix, Spotify, Disney+, PureGym)
+  - "fees": bank fees, late charges, annual fees, overdraft charges
+  - "interest": interest charges from the bank/card issuer
+  - "payment": payments TO the card/account (paying off the balance), direct debits to other accounts
+  - "transfer": balance transfers, money transfers between accounts
+  - "income": salary, wages, refunds, cashback, credits received
+  - "other": anything that doesn't clearly fit the above
+  Never leave category as null — always make your best guess.
+- For balance_segments: extract EVERY row from the Interest Summary / Interest Rate table if present. Mark segments as promotional (is_promotional=true) if the rate is 0% or described as "promotional", "introductory", "balance transfer offer", etc. Extract the expiry date if shown.`;
 
 const STATEMENT_JSON_SCHEMA = {
   type: 'object',

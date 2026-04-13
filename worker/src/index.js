@@ -46,6 +46,11 @@ export default {
         if (pdfMatch && m === 'GET') return cors(await getStatementPdf(env, Number(pdfMatch[1])));
 
         if (p === '/api/transactions' && m === 'GET') return cors(await listTransactions(env, url));
+        if (p === '/api/transactions/export' && m === 'GET') return cors(await exportTransactionsCsv(env, url));
+
+        const txMatch = p.match(/^\/api\/transactions\/(\d+)$/);
+        if (txMatch && m === 'PATCH') return cors(await updateTransaction(request, env, Number(txMatch[1])));
+
         if (p === '/api/accounts' && m === 'GET') return cors(await listAccounts(env));
         if (p === '/api/categories' && m === 'GET') return cors(await listCategories(env));
         if (p === '/api/debt-summary' && m === 'GET') return cors(await getDebtSummary(env));
@@ -306,6 +311,70 @@ async function listTransactions(env, url) {
 async function listAccounts(env) {
   const { results } = await env.DB.prepare(`SELECT * FROM accounts ORDER BY name ASC`).all();
   return json({ accounts: results || [] });
+}
+
+async function updateTransaction(request, env, id) {
+  const body = await request.json();
+  const tx = await env.DB.prepare(`SELECT id FROM transactions WHERE id = ?`).bind(id).first();
+  if (!tx) return json({ error: 'not found' }, 404);
+
+  const updates = [];
+  const binds = [];
+  for (const field of ['category', 'description', 'merchant']) {
+    if (field in body) {
+      updates.push(`${field} = ?`);
+      binds.push(body[field]);
+    }
+  }
+  if (!updates.length) return json({ error: 'nothing to update' }, 400);
+
+  binds.push(id);
+  await env.DB.prepare(`UPDATE transactions SET ${updates.join(', ')} WHERE id = ?`).bind(...binds).run();
+  const updated = await env.DB.prepare(`SELECT * FROM transactions WHERE id = ?`).bind(id).first();
+  return json({ transaction: updated });
+}
+
+async function exportTransactionsCsv(env, url) {
+  const q = (url.searchParams.get('q') || '').trim();
+  const category = url.searchParams.get('category');
+  const from = url.searchParams.get('from');
+  const to = url.searchParams.get('to');
+
+  const where = [];
+  const binds = [];
+  if (q) { where.push(`(t.description LIKE ? OR t.merchant LIKE ?)`); binds.push(`%${q}%`, `%${q}%`); }
+  if (category) { where.push(`t.category = ?`); binds.push(category); }
+  if (from) { where.push(`t.tx_date >= ?`); binds.push(from); }
+  if (to) { where.push(`t.tx_date <= ?`); binds.push(to); }
+  const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+  const { results } = await env.DB.prepare(
+    `SELECT t.tx_date, t.post_date, t.description, t.merchant, t.category,
+            t.amount, t.direction, t.currency, s.account_name, s.issuer, s.last_four
+     FROM transactions t
+     LEFT JOIN statements s ON s.id = t.statement_id
+     ${whereSql}
+     ORDER BY COALESCE(t.tx_date, t.post_date) DESC, t.id DESC
+     LIMIT 10000`
+  ).bind(...binds).all();
+
+  const rows = results || [];
+  const header = 'Date,Post Date,Description,Merchant,Category,Amount,Direction,Currency,Account,Issuer,Card\n';
+  const csvRows = rows.map((r) => {
+    const fields = [r.tx_date, r.post_date, r.description, r.merchant, r.category, r.amount, r.direction, r.currency, r.account_name, r.issuer, r.last_four];
+    return fields.map((f) => {
+      if (f == null) return '';
+      const s = String(f);
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(',');
+  }).join('\n');
+
+  return new Response(header + csvRows, {
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': 'attachment; filename="financelog-transactions.csv"'
+    }
+  });
 }
 
 async function listCategories(env) {

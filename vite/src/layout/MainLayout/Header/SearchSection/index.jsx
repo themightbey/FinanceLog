@@ -1,162 +1,159 @@
 import PropTypes from 'prop-types';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import useSWR from 'swr';
 
-// material-ui
 import { useTheme } from '@mui/material/styles';
 import Avatar from '@mui/material/Avatar';
-import Card from '@mui/material/Card';
-import Grid from '@mui/material/Grid';
-import InputAdornment from '@mui/material/InputAdornment';
-import OutlinedInput from '@mui/material/OutlinedInput';
-import Popper from '@mui/material/Popper';
 import Box from '@mui/material/Box';
+import ClickAwayListener from '@mui/material/ClickAwayListener';
+import InputAdornment from '@mui/material/InputAdornment';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
+import OutlinedInput from '@mui/material/OutlinedInput';
+import Paper from '@mui/material/Paper';
+import Popper from '@mui/material/Popper';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Stack from '@mui/material/Stack';
 
-// third party
-import PopupState, { bindPopper, bindToggle } from 'material-ui-popup-state';
+import { IconSearch } from '@tabler/icons-react';
 
-// project imports
-import Transitions from 'ui-component/extended/Transitions';
+import financeApi from 'api/finance';
+import { formatMoney, formatDate, CATEGORY_COLORS } from 'utils/finance-format';
 
-// assets
-import { IconAdjustmentsHorizontal, IconSearch, IconX } from '@tabler/icons-react';
-
-function HeaderAvatar({ children, ref, ...others }) {
-  const theme = useTheme();
-
-  return (
-    <Avatar
-      ref={ref}
-      variant="rounded"
-      sx={{
-        ...theme.typography.commonAvatar,
-        ...theme.typography.mediumAvatar,
-        color: theme.vars.palette.secondary.dark,
-        background: theme.vars.palette.secondary.light,
-        '&:hover': {
-          color: theme.vars.palette.secondary.light,
-          background: theme.vars.palette.secondary.dark
-        }
-      }}
-      {...others}
-    >
-      {children}
-    </Avatar>
-  );
+function useDebounce(value, delay) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
 }
-
-// ==============================|| SEARCH INPUT - MOBILE||============================== //
-
-function MobileSearch({ value, setValue, popupState }) {
-  const theme = useTheme();
-
-  return (
-    <OutlinedInput
-      id="input-search-header"
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      placeholder="Search"
-      startAdornment={
-        <InputAdornment position="start">
-          <IconSearch stroke={1.5} size="16px" />
-        </InputAdornment>
-      }
-      endAdornment={
-        <InputAdornment position="end">
-          <HeaderAvatar>
-            <IconAdjustmentsHorizontal stroke={1.5} size="20px" />
-          </HeaderAvatar>
-          <Box sx={{ ml: 2 }}>
-            <Avatar
-              variant="rounded"
-              sx={{
-                ...theme.typography.commonAvatar,
-                ...theme.typography.mediumAvatar,
-                bgcolor: 'orange.light',
-                color: 'orange.dark',
-                '&:hover': { bgcolor: 'orange.dark', color: 'orange.light' }
-              }}
-              {...bindToggle(popupState)}
-            >
-              <IconX stroke={1.5} size="20px" />
-            </Avatar>
-          </Box>
-        </InputAdornment>
-      }
-      aria-describedby="search-helper-text"
-      slotProps={{ input: { 'aria-label': 'weight', sx: { bgcolor: 'transparent', pl: 0.5 } } }}
-      sx={{ width: '100%', ml: 0.5, px: 2, bgcolor: 'background.paper' }}
-    />
-  );
-}
-
-// ==============================|| SEARCH INPUT ||============================== //
 
 export default function SearchSection() {
+  const theme = useTheme();
+  const navigate = useNavigate();
   const [value, setValue] = useState('');
+  const [open, setOpen] = useState(false);
+  const anchorRef = useRef(null);
+  const debouncedQuery = useDebounce(value, 300);
+
+  const { data } = useSWR(
+    debouncedQuery.length >= 2 ? ['search', debouncedQuery] : null,
+    () => financeApi.listTransactions({ q: debouncedQuery, limit: 8 }),
+    { revalidateOnFocus: false }
+  );
+
+  const results = data?.transactions || [];
+
+  useEffect(() => {
+    setOpen(debouncedQuery.length >= 2 && results.length > 0);
+  }, [debouncedQuery, results.length]);
+
+  const handleSelect = useCallback(() => {
+    navigate(`/finance/transactions?q=${encodeURIComponent(value)}`);
+    setOpen(false);
+    setValue('');
+  }, [navigate, value]);
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && value.trim()) {
+      handleSelect();
+    }
+    if (e.key === 'Escape') {
+      setOpen(false);
+    }
+  };
 
   return (
-    <>
-      <Box sx={{ display: { xs: 'block', md: 'none' } }}>
-        <PopupState variant="popper" popupId="demo-popup-popper">
-          {(popupState) => (
-            <>
-              <Box sx={{ ml: 2 }}>
-                <HeaderAvatar {...bindToggle(popupState)}>
-                  <IconSearch stroke={1.5} size="19.2px" />
-                </HeaderAvatar>
-              </Box>
-              <Popper
-                {...bindPopper(popupState)}
-                transition
-                sx={{ zIndex: 1100, width: '99%', top: '-55px !important', px: { xs: 1.25, sm: 1.5 } }}
-              >
-                {({ TransitionProps }) => (
-                  <>
-                    <Transitions type="zoom" {...TransitionProps} sx={{ transformOrigin: 'center left' }}>
-                      <Card sx={{ bgcolor: 'background.default', border: 0, boxShadow: 'none' }}>
-                        <Box sx={{ p: 2 }}>
-                          <Grid container sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Grid size="grow">
-                              <MobileSearch value={value} setValue={setValue} popupState={popupState} />
-                            </Grid>
-                          </Grid>
-                        </Box>
-                      </Card>
-                    </Transitions>
-                  </>
-                )}
-              </Popper>
-            </>
-          )}
-        </PopupState>
-      </Box>
-      <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-        <OutlinedInput
-          id="input-search-header"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="Search"
-          startAdornment={
-            <InputAdornment position="start">
-              <IconSearch stroke={1.5} size="16px" />
-            </InputAdornment>
-          }
-          endAdornment={
-            <InputAdornment position="end">
-              <HeaderAvatar>
-                <IconAdjustmentsHorizontal stroke={1.5} size="20px" />
-              </HeaderAvatar>
-            </InputAdornment>
-          }
-          aria-describedby="search-helper-text"
-          slotProps={{ input: { 'aria-label': 'weight', sx: { bgcolor: 'transparent', pl: 0.5 } } }}
-          sx={{ width: { md: 250, lg: 434 }, ml: 2, px: 2 }}
-        />
-      </Box>
-    </>
+    <Box sx={{ ml: 2 }} ref={anchorRef}>
+      <OutlinedInput
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onFocus={() => debouncedQuery.length >= 2 && results.length > 0 && setOpen(true)}
+        placeholder="Search transactions…"
+        startAdornment={
+          <InputAdornment position="start">
+            <IconSearch stroke={1.5} size="16px" color={theme.palette.grey[500]} />
+          </InputAdornment>
+        }
+        size="small"
+        sx={{
+          width: { xs: 200, md: 280, lg: 400 },
+          bgcolor: 'background.paper',
+          borderRadius: 2,
+          '& .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.grey[200] }
+        }}
+      />
+      <Popper open={open} anchorEl={anchorRef.current} placement="bottom-start" sx={{ zIndex: 1300, width: { xs: 320, md: 400 } }}>
+        <ClickAwayListener onClickAway={() => setOpen(false)}>
+          <Paper elevation={8} sx={{ borderRadius: 2, mt: 0.5, overflow: 'hidden' }}>
+            <List dense disablePadding>
+              {results.map((t) => (
+                <ListItemButton
+                  key={t.id}
+                  onClick={() => {
+                    navigate(`/finance/transactions?q=${encodeURIComponent(t.description || t.merchant || '')}`);
+                    setOpen(false);
+                    setValue('');
+                  }}
+                  sx={{ py: 1.5, px: 2 }}
+                >
+                  <ListItemText
+                    primary={
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography variant="body2" noWrap sx={{ flex: 1, mr: 1 }}>
+                          {t.description || t.merchant || '—'}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 600, color: Number(t.amount) > 0 ? 'error.main' : 'success.main', whiteSpace: 'nowrap' }}
+                        >
+                          {formatMoney(Math.abs(t.amount))}
+                        </Typography>
+                      </Stack>
+                    }
+                    secondary={
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatDate(t.tx_date || t.post_date)}
+                        </Typography>
+                        {t.category && (
+                          <Chip
+                            size="small"
+                            label={t.category}
+                            sx={{
+                              height: 18,
+                              fontSize: '0.65rem',
+                              bgcolor: CATEGORY_COLORS[t.category] || CATEGORY_COLORS.other,
+                              color: '#fff'
+                            }}
+                          />
+                        )}
+                        {(t.account_name || t.issuer) && (
+                          <Typography variant="caption" color="text.secondary">
+                            {t.account_name || t.issuer}
+                          </Typography>
+                        )}
+                      </Stack>
+                    }
+                  />
+                </ListItemButton>
+              ))}
+              <ListItemButton onClick={handleSelect} sx={{ py: 1.5, px: 2, borderTop: 1, borderColor: 'divider' }}>
+                <Typography variant="body2" color="primary" sx={{ width: '100%', textAlign: 'center', fontWeight: 500 }}>
+                  View all results for &quot;{value}&quot;
+                </Typography>
+              </ListItemButton>
+            </List>
+          </Paper>
+        </ClickAwayListener>
+      </Popper>
+    </Box>
   );
 }
 
-HeaderAvatar.propTypes = { children: PropTypes.node, ref: PropTypes.any, others: PropTypes.any };
-
-MobileSearch.propTypes = { value: PropTypes.string, setValue: PropTypes.func, popupState: PropTypes.any };
+SearchSection.propTypes = {};
