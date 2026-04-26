@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "financelog",
+  "compatibility_date": "2026-04-13",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "vite"
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}
